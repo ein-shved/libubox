@@ -160,6 +160,43 @@ static bool uloop_fd_stack_event(struct uloop_fd *fd, int events)
 	return false;
 }
 
+#define __dbg_fd_size 1024
+static void * __dbg_fd_data[__dbg_fd_size] = { NULL };
+
+static void __dbg_uloop_add_fd_debug(void *cb)
+{
+    int i=0;
+    for (i=0; i < __dbg_fd_size; ++i) {
+        if (__dbg_fd_data[i]) {
+            if (__dbg_fd_data[i] == cb) {
+                return;
+            }
+            continue;
+        }
+        if (i  < __dbg_fd_size - 1) {
+            __dbg_fd_data[i + 1] = NULL;
+        }
+        break;
+    }
+    if (i >= __dbg_fd_size) {
+        return;
+    }
+    __dbg_fd_data[i] = cb;
+}
+static int __dbg_uloop_check_fd_debug(void *cb)
+{
+    int i=0;
+    for (i=0; i < __dbg_fd_size; ++i) {
+        if (__dbg_fd_data[i] == NULL) {
+            return -1;
+        }
+        if (__dbg_fd_data[i] == cb) {
+            return 0;
+        }
+    }
+    return -1;
+}
+
 static void uloop_run_events(int timeout)
 {
 	struct uloop_fd_event *cur;
@@ -195,6 +232,9 @@ static void uloop_run_events(int timeout)
 		fd_stack = &stack_cur;
 		do {
 			stack_cur.events = 0;
+            if (__dbg_uloop_check_fd_debug(fd->cb) < 0) {
+                continue;
+            }
 			fd->cb(fd, events);
 			events = stack_cur.events & ULOOP_EVENT_MASK;
 		} while (stack_cur.fd && events);
@@ -218,6 +258,7 @@ int uloop_fd_add(struct uloop_fd *sock, unsigned int flags)
 		fcntl(sock->fd, F_SETFL, fl);
 	}
 
+    __dbg_uloop_add_fd_debug(sock->cb);
 	ret = register_poll(sock, flags);
 	if (ret < 0)
 		goto out;
